@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+      "target": "ES6",                   
+      "module": "commonjs",              
+      "outDir": "./build",                    
+      "strict": true,
+      "moduleResolution": "node",                                 
+      "rootDirs": ["./"],
+      "esModuleInterop": true,
+      "allowUnreachableCode": false,                         
+      "inlineSourceMap": true,               
+      "inlineSources": true,                 
+      "forceConsistentCasingInFileNames": true,
+      "strictNullChecks": false,
+      "experimentalDecorators": true,
+      "noFallthroughCasesInSwitch": true,
+    },
+    "exclude": ["node_modules"]
+}
