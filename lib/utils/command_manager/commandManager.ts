@@ -56,10 +56,10 @@ export class commandManager {
     }
 
     for (let guild of this.bot.guilds.cache.values()) {
-      await this.comManager.set([], guild.id);
+      await this.comManager.set([], guild.id).catch(() => {});
     }
     for (let gcommand of (await this.comManager.fetch()).values()) {
-      await gcommand.delete();
+      await gcommand.delete().catch(() => {});
     }
     await this.bot.db.bot.replaceData('cstate', cstate)
     await this.deployCommands([this.bot.commands["cmanager"]], [process.env.ownerServerId]);
