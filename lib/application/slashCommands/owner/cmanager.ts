@@ -52,9 +52,8 @@ export default class CManager extends CommandT {
   private async deploy(): Promise<void> {
     await this.originalInteraction.deferReply();
 
-    let IDSraw = this.originalInteraction.options.getString("guild");
-    let IDS = IDSraw.trim().split(" ")
-    let comNames = this.originalInteraction.options.getString("name")?.trim()?.split(" ");
+    let comNames = this.originalInteraction.options.getString("name").trim().split(" ");
+    let IDS = this.originalInteraction.options.getString("guild")?.trim()?.split(" ");
 
     let adlist = [];
 
@@ -90,9 +89,9 @@ export default class CManager extends CommandT {
 
   private async remove(): Promise<void> {
     await this.originalInteraction.deferReply();
-
-    let IDS = this.originalInteraction.options.getString("guild")?.trim()?.split(" ");
+    
     let comNames = this.originalInteraction.options.getString("name").trim().split(" ");
+    let IDS = this.originalInteraction.options.getString("guild")?.trim()?.split(" ");
 
     let adlist: string[] = []
 
