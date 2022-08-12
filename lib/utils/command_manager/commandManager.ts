@@ -5,7 +5,7 @@ export class commandManager {
   constructor(private bot: Bot) {}
   private comManager = this.bot.application.commands;
 
-  public async deployCommands(commandArray: any[], guildIds?: string[]) {
+  public async deployCommands(commandArray: any[], guildIds?: string[] | undefined) {
     let cstate = await this.bot.db.bot.getData('cstate')
 
     if (guildIds) {
@@ -25,7 +25,7 @@ export class commandManager {
     await this.bot.db.bot.replaceData('cstate', cstate)
   }
 
-  public async removeCommands(name: string[], guildID?: string[]) {
+  public async removeCommands(name: string[], guildID?: string[] | undefined) {
     let cstate = await this.bot.db.bot.getData('cstate')
     if (guildID) {
       for (let guild of this.bot.guilds.cache.values()) {

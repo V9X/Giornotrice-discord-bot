@@ -15,7 +15,7 @@ export default class CManager extends CommandT {
             .addStringOption((o) => o.setName("guild").setDescription("IDS[]")))
         .addSubcommand((m) => m.setName("remove").setDescription("Remove commands")
             .addStringOption((o) => o.setName("name").setDescription("NAME[] | ALL").setRequired(true))
-            .addStringOption((o) => o.setName("guild").setDescription("IDS[]").setRequired(true)))
+            .addStringOption((o) => o.setName("guild").setDescription("IDS[]")))
         .addSubcommand((m) => m.setName("removeall").setDescription("Remove all commands")).toJSON();
     return command;
   }
@@ -54,7 +54,7 @@ export default class CManager extends CommandT {
 
     let IDSraw = this.originalInteraction.options.getString("guild");
     let IDS = IDSraw.trim().split(" ")
-    let comNames = this.originalInteraction.options.getString("name").trim().split(" ");
+    let comNames = this.originalInteraction.options.getString("name")?.trim()?.split(" ");
 
     let adlist = [];
 
@@ -91,7 +91,7 @@ export default class CManager extends CommandT {
   private async remove(): Promise<void> {
     await this.originalInteraction.deferReply();
 
-    let IDS = this.originalInteraction.options.getString("guild").trim().split(" ");
+    let IDS = this.originalInteraction.options.getString("guild")?.trim()?.split(" ");
     let comNames = this.originalInteraction.options.getString("name").trim().split(" ");
 
     let adlist: string[] = []
