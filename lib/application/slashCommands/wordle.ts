@@ -107,7 +107,7 @@ export default class Wordle extends CommandT {
     await new Wordle(int, bot).main();
   }
 
-  constructor( private originalInteraction: Discord.ChatInputCommandInteraction, private bot: Bot ) { super() }
+  constructor(private originalInteraction: Discord.ChatInputCommandInteraction, private bot: Bot) { super() }
 
   private originalMessage: Discord.Message;
   private embed: Discord.EmbedBuilder;
@@ -132,7 +132,7 @@ export default class Wordle extends CommandT {
     mainRow: new Discord.ActionRowBuilder<Discord.ButtonBuilder>({ components: [this.components.answerButton, this.components.publicButton, this.components.endGameButton] })
   };
 
-  private async main() {
+  private async main(): Promise<void> {
     let lan = this.originalInteraction.options.getString( "language", false ) || "english"
     this.language = lan as 'polish' | 'english'
     this.guessingWord = Wordle.wordLists[this.language][Math.floor(Math.random() * Wordle.wordLists[this.language].length)];
@@ -141,27 +141,27 @@ export default class Wordle extends CommandT {
     this.ctx.drawImage(Wordle.images.template, 0, 0, 800, 1280);
 
     this.embed = new Discord.EmbedBuilder()
-    .setColor(0x538d4e)
-    .setAuthor({ name: `Wordle [${this.language}]`,url: "https://www.powerlanguage.co.uk/wordle/", iconURL: "https://cdn.discordapp.com/attachments/752238790323732494/963154625110880316/W.png" })
-    .setFooter({ text: `${this.originalInteraction.user.username} is playing` })
-    .setImage("attachment://wt.png")
-    .setDescription("type 5-letter word to start");
+      .setColor(0x538d4e)
+      .setAuthor({ name: `Wordle [${this.language}]`,url: "https://www.powerlanguage.co.uk/wordle/", iconURL: "https://cdn.discordapp.com/attachments/752238790323732494/963154625110880316/W.png" })
+      .setFooter({ text: `${this.originalInteraction.user.username} is playing` })
+      .setImage("attachment://wt.png")
+      .setDescription("type 5-letter word to start");
 
     this.originalMessage = await this.originalInteraction.reply({ 
-        embeds: [this.embed], 
-        components: [this.actionRows.mainRow], 
-        files: [new Discord.AttachmentBuilder(this.cnv.toBuffer(), {name: "wt.png"} )], 
-        fetchReply: true 
+      embeds: [this.embed], 
+      components: [this.actionRows.mainRow], 
+      files: [new Discord.AttachmentBuilder(this.cnv.toBuffer(), {name: "wt.png"} )], 
+      fetchReply: true 
     })
-    await this.startCollectors();
+    this.startCollectors();
   }
-  private async startCollectors() {
+  private startCollectors(): void {
     this.msgCollector = this.originalMessage.channel.createMessageCollector({ idle: 3600000, filter: (m) => m.content.length == 5 && !this.processing });
     this.interCollector = this.originalMessage.createMessageComponentCollector();
 
     this.msgCollector.on("collect", async (msg) => {
       if (msg.author.id == this.originalInteraction.user.id || this.isButtonPublicActive){
-        this.onMessage(msg.content);
+        await this.onMessage(msg.content);
         setTimeout(() => { msg.delete().catch(() => {}) }, 10);
       };
     });
@@ -170,18 +170,13 @@ export default class Wordle extends CommandT {
       await this.onCollectorStop(reason)
     });
     this.interCollector.on("collect", async (interaction) => {
-      this.handlers[interaction.customId as keyof Wordle['handlers']](interaction);
+      await this.handlers[interaction.customId as keyof Wordle['handlers']](interaction);
     });
-    (this.msgCollector as any).on("error", async (error: any) => { 
-      await this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Wordle.commandName, error)] });
-    });
-    this.interCollector.on("error", async (error) => {
-      await this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Wordle.commandName, error)] });
-      this.msgCollector.stop();
-    });
+    this.bot.misc.collectorErrorHandler(Wordle.commandName, this.originalMessage, this.msgCollector, this.originalInteraction);
+    this.bot.misc.collectorErrorHandler(Wordle.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
 
-  private async onCollectorStop(reason: string) {
+  private async onCollectorStop(reason: string): Promise<void> {
     switch (reason) {
       case "time":
       case "idle":
@@ -200,7 +195,7 @@ export default class Wordle extends CommandT {
     }
   }
 
-  private async onMessage(content: String) {
+  private async onMessage(content: String): Promise<void> {
     this.processing = true;
 
     if (!Wordle.wordLists[this.language].includes(content.toLowerCase())) {
@@ -251,8 +246,8 @@ export default class Wordle extends CommandT {
   private handlers = new class{
     constructor(private outer: Wordle) {}
 
-    async answerButton( interaction: Discord.MessageComponentInteraction ) {
-      if ( interaction.user.id != this.outer.originalInteraction.user.id && !this.outer.isButtonPublicActive) {
+    async answerButton(interaction: Discord.MessageComponentInteraction): Promise<void> {
+      if (interaction.user.id != this.outer.originalInteraction.user.id && !this.outer.isButtonPublicActive) {
           await interaction.reply({embeds: [ Wordle.unAuthClEmbed ], ephemeral: true });
           return;
       } 
@@ -271,27 +266,24 @@ export default class Wordle extends CommandT {
         .setTitle("wordle")
         .setComponents(actionRow);
       await interaction.showModal(modal);
-      interaction.awaitModalSubmit({ filter: (int) => int.customId == modid, time: 60000 })
-        .then(int => {
-          this.outer.onMessage(int.fields.getTextInputValue("1"))
-          //@ts-ignore
-          int.deferUpdate()
-         })
-        .catch(() => {});
+      let int = await interaction.awaitModalSubmit({ filter: (int) => int.customId == modid, time: 60000 }).catch(() => undefined);
+      if(!int) return;
+      await this.outer.onMessage(int.fields.getTextInputValue("1"));
+      await int.deferUpdate();
     }
 
-    async publicButton( interaction: Discord.MessageComponentInteraction ) {
+    async publicButton(interaction: Discord.MessageComponentInteraction): Promise<void> {
       if (interaction.user.id != this.outer.originalInteraction.user.id) {
         await interaction.reply({ embeds: [Wordle.unAuthClEmbed], ephemeral: true });
         return;
       }
       this.outer.components.publicButton.setLabel(this.outer.isButtonPublicActive ? "public" : "private");
-      this.outer.isButtonPublicActive = !this.outer.isButtonPublicActive ? true : false;
+      this.outer.isButtonPublicActive = !this.outer.isButtonPublicActive;
   
       await interaction.update({ components: [this.outer.actionRows.mainRow] });
     }
 
-    async endGameButton( interaction: Discord.MessageComponentInteraction ) {
+    async endGameButton(interaction: Discord.MessageComponentInteraction): Promise<void> {
       if (interaction.user.id != this.outer.originalInteraction.user.id) {
         await interaction.reply({ embeds: [Wordle.unAuthClEmbed], ephemeral: true });
         return;
@@ -302,7 +294,7 @@ export default class Wordle extends CommandT {
 
   }(this)
 
-  private genWord(correct: string, input: string) {
+  private genWord(correct: string, input: string): string[] {
     let C = correct;
     let G = input;
     let out = [] as string[];
@@ -317,7 +309,7 @@ export default class Wordle extends CommandT {
     }
     return out;
   }
-  private genKeyboard(correct: string, input: string) {
+  private genKeyboard(correct: string, input: string): string[] {
     let C = correct;
     let G = input;
     let yellow = [];

@@ -101,7 +101,7 @@ export default class Tictactoe extends CommandT {
     this.interCollector = this.originalMessage.createMessageComponentCollector({ idle: 3600000 });
     let currentPlayer = this.player.first;
     let cox = false;
-    this.interCollector.on( "collect", async (interaction: Discord.ButtonInteraction) => {
+    this.interCollector.on("collect", async (interaction: Discord.ButtonInteraction) => {
         if (interaction.user.id == currentPlayer.id) {
           for (let button of this.buttonList) {
             if ((button as any).data.custom_id == interaction.customId) {
@@ -129,7 +129,7 @@ export default class Tictactoe extends CommandT {
       }
     );
 
-    this.interCollector.on("end", (_, reason) => {
+    this.interCollector.on("end", async (_, reason) => {
       switch (reason) {
         case "time":
         case "idle":
@@ -139,12 +139,10 @@ export default class Tictactoe extends CommandT {
           return;
       }
       this.buttonList.forEach((b) => b.setDisabled(true));
-      this.originalMessage.edit({ embeds: [this.embed], components: [this.actionRows.row1, this.actionRows.row2, this.actionRows.row3] }).catch(() => {});
+      await this.originalMessage.edit({ embeds: [this.embed], components: [this.actionRows.row1, this.actionRows.row2, this.actionRows.row3] }).catch(() => {});
     });
 
-    this.interCollector.on("error", async (error) => {
-      await this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Tictactoe.commandName, error)] });
-    });
+    this.bot.misc.collectorErrorHandler(Tictactoe.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
 
   private check(): boolean {

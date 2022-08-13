@@ -39,12 +39,12 @@ export default class Music extends CommandT {
     if (musicInstance) {
       musicInstance.originalInteraction = interaction;
       musicInstance.interCollector.stop("newWindow");
-      musicInstance.main();
+      await musicInstance.main();
     } else {
       let qah = await bot.db.music.getData(interaction.guildId)
       let inst = new Music(interaction, bot, qah);
       Music.musicInstances[interaction.guildId] = inst;
-      inst.main();
+      await inst.main();
     }
   }
 
@@ -135,12 +135,13 @@ export default class Music extends CommandT {
     this.currentGroup = "player";
     let cBuilder: cBuilder = this.cBuilders.player();
     this.originalMessage = await this.originalInteraction.reply({ embeds: cBuilder.embeds, components: cBuilder.actionRows, fetchReply: true });
+    this.timer = setTimeout(async () => { await this.onTimerEnd() }, 3600000);
     this.startCollectors();
-    this.timer = setTimeout(() => { this.interCollector?.stop("time") }, 3600000);
   }
 
   private async updateCurrentPage<B extends boolean>(x?: B): Promise<B extends true ? cBuilder : void>;
   private async updateCurrentPage(get: boolean = false): Promise<cBuilder | void> {
+    if(this.interCollector.ended) return;
     let cBuilder: cBuilder = this.cBuilders[this.currentGroup]();
     if (get) { 
       return cBuilder;
@@ -148,22 +149,31 @@ export default class Music extends CommandT {
       await this.originalMessage.edit({embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
   }
+
+  private async onTimerEnd(): Promise<void> {
+    if(!this.vc || this.vc?.player?.state?.status == voice.AudioPlayerStatus.Paused || this.vc?.channel?.members?.size == 1){
+      this.vc && this.vc.connection.disconnect();
+      this.interCollector.stop('time');
+      await this.bot.db.music.replaceData(this.originalInteraction.guildId, this.queue, this.history);
+      delete Music.musicInstances[this.originalInteraction.guildId];
+    } else {
+      this.timer.refresh();
+    }
+  }
   
-  private async startCollectors(): Promise<void> {
+  private startCollectors(): void {
     this.interCollector = this.originalMessage.createMessageComponentCollector();
 
-    this.interCollector.on("collect", (interaction) => {
-      this.timer?.refresh();
-      this.handlers[interaction.customId as keyof Music["handlers"]](interaction);
+    this.interCollector.on("collect", async (interaction) => {
+      this.timer.refresh();
+      await this.handlers[interaction.customId as keyof Music["handlers"]](interaction);
     });
 
-    this.interCollector.on("end", (_, reason) => this.onCollectorStop(reason));
-    this.interCollector.on("error", (error) => {
-      this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Music.commandName, error)] });
-    });
+    this.interCollector.on("end", async (_, reason) => await this.onCollectorStop(reason));
+    this.bot.misc.collectorErrorHandler(Music.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
 
-  private onCollectorStop(reason: string): void {
+  private async onCollectorStop(reason: string): Promise<void> {
     let embed = new Discord.EmbedBuilder()
       .setColor(0xff0000)
       .setAuthor({ name: `Music manager`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
@@ -175,13 +185,11 @@ export default class Music extends CommandT {
       case "time":
         embed.setTitle("Manager closed because of no activity.");
     }
-    this.bot.db.music.replaceData(this.originalInteraction.guildId, this.queue, this.history)
-    this.originalMessage.edit({ embeds: [embed], components: [] }).catch(() => {});
+    await this.originalMessage.edit({ embeds: [embed], components: [] }).catch(() => {});
   }
 
   private startConnection(voiceChannelID: string): void {
     if (this.vc) return;
-    clearTimeout(this.timer);
 
     let connection: voice.VoiceConnection = voice.joinVoiceChannel({
       channelId: voiceChannelID,
@@ -200,10 +208,10 @@ export default class Music extends CommandT {
       nowPlaying: undefined,
     };
 
-    this.vc.connection.on("stateChange", (_, state) => {
+    this.vc.connection.on("stateChange", async (_, state) => {
       switch (state.status) {
         case "ready":
-          this.updateCurrentPage();
+          await this.updateCurrentPage();
           this.vc.channel = this.originalInteraction.guild.members.me.voice.channel;
           break;
         case "disconnected":
@@ -212,37 +220,34 @@ export default class Music extends CommandT {
         case "destroyed": {
           this.vc.player.stop();
           this.vc = undefined;
-          this.updateCurrentPage();
-          this.timer = setTimeout(() => { this.interCollector?.stop("time") }, 3600000);
+          await this.updateCurrentPage();
         }
       }
     });
   }
 
   private async player(): Promise<void> {
+    this.timer.refresh()
     if (!this.queue[0] && !this.loopnum) {
-      setTimeout(() => {
-        this.vc.connection.disconnect(), 10000;
-      })
+      setTimeout(() => { this.vc.connection.disconnect(), 10000 })
       return;
     }
     this.loopnum ? (this.loopnum -= 1) : (this.vc.nowPlaying = this.queue.shift());
     this.history.unshift(this.vc.nowPlaying);
     let stream: opus.WebmDemuxer | opus.Encoder;
-    try {
-      stream = await ytf.getStream(this.vc.nowPlaying.url);
-    } catch (error) {
-      this.onSongError(error, this.vc.nowPlaying);
-      this.player();
+    try { stream = await ytf.getStream(this.vc.nowPlaying.url) } 
+    catch (error) {
+      await this.onSongError(error, this.vc.nowPlaying);
+      await this.player();
       return;
     }
     this.vc.stream = stream;
     let res = voice.createAudioResource(stream);
     this.vc.player.play(res);
-    this.updateCurrentPage();
-    stream.on("end", () => {
+    await this.updateCurrentPage();
+    stream.on("end", async () => {
       this.vc.player.stop();
-      this.vc.channel.members.size == 1 ? this.vc.connection.disconnect() : this.player();
+      this.vc.channel.members.size == 1 ? this.vc.connection.disconnect() : await this.player();
     });
   }
 
@@ -270,21 +275,20 @@ export default class Music extends CommandT {
     });
 
     let collector = message.createMessageComponentCollector({ time: 300000 });
-    collector.on("collect", (int) => {
+    collector.on("collect", async (int) => {
       if (int.customId == "oseyb") {
         this.queue = this.queue.filter((s) => s.title != song.title);
         this.history = this.queue.filter((h) => h.title != song.title);
-        int.deferUpdate()
-        this.updateCurrentPage()
+        await int.deferUpdate()
+        await this.updateCurrentPage()
       }
       collector.stop();
     });
-    collector.on("end", () => {
+    collector.on("end", async () => {
       message.delete().catch(() => {});
     });
-    collector.on("error", async (error) => {
-      this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Music.commandName, error)] });
-    });
+
+    this.bot.misc.collectorErrorHandler(Music.commandName, this.originalMessage, collector, this.originalInteraction);
   }
 
   private cBuilders = new class {
@@ -317,8 +321,7 @@ export default class Music extends CommandT {
         .setThumbnail( this.outer.vc?.nowPlaying ? this.outer.vc?.nowPlaying.thumbnail : null )
         .setFields(
           ...playerFields,
-          { name: "⠀", value: "⠀" },
-          { name: "Next in queue:", value: "⠀" },
+          { name: "⠀", value: "Next in queue:" },
           ...queue.slice(0, 4).map((song, index) => {
             return {
               name: `Channel: ${song.author.name}, Length: ${song.length} | Added by ${song.addingUser}`,
@@ -467,7 +470,7 @@ export default class Music extends CommandT {
       let group = interaction.values[0] as keyof Music["cBuilders"];
       let cBuilder = this.outer.cBuilders[group](1);
 
-      interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
+      await interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
     async player_play(interaction: Discord.MessageComponentInteraction): Promise<void> {
       let originalVoiceChannelId = (interaction.member as Discord.GuildMember).voice.channelId;
@@ -478,25 +481,25 @@ export default class Music extends CommandT {
 
       if (!originalVoiceChannelId) {
         embed.setTitle("You're not in the voice channel, join one and try again.");
-        interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
         return;
       }
 
       if (!this.outer.vc) {
         this.outer.startConnection(originalVoiceChannelId);
-        this.outer.player();
-        interaction.deferUpdate();
+        await interaction.deferUpdate();
+        await this.outer.player();
         return;
       }
       this.outer?.vc?.player?.state?.status == voice.AudioPlayerStatus.Paused ? this.outer.vc?.player?.unpause() : this.outer.vc?.player?.pause(true);
       let cBuilder = await this.outer.updateCurrentPage(true);
-      interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
+      await interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
 
     async player_skip(interaction: Discord.MessageComponentInteraction): Promise<void> {
       this.outer.loopnum = 0;
       this.outer?.vc?.stream?.end();
-      interaction.deferUpdate();
+      await interaction.deferUpdate();
     }
 
     async player_addsong(interaction: Discord.MessageComponentInteraction): Promise<void> {
@@ -526,122 +529,121 @@ export default class Music extends CommandT {
         .setTitle("Add song")
         .setComponents(actionRow1, actionRow2, actionRow3);
       interaction.showModal(modal);
-      interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 })
-        .then(async (int) => {
-          let embed = new Discord.EmbedBuilder()
-            .setColor(0xff0000)
-            .setAuthor({ name: `Music manager | add song`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
+      let int = await interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 }).catch(() => undefined)
+      if(!int) return;
+      let embed = new Discord.EmbedBuilder()
+        .setColor(0xff0000)
+        .setAuthor({ name: `Music manager | add song`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
 
-          let songName = int.fields.getTextInputValue("1");
-          let onTop = int.fields.getTextInputValue("2").length == 0 ? false : true;
-          let isSearch = int.fields.getTextInputValue("3").length == 0 ? false : true;
+      let songName = int.fields.getTextInputValue("1");
+      let onTop = int.fields.getTextInputValue("2").length == 0 ? false : true;
+      let isSearch = int.fields.getTextInputValue("3").length == 0 ? false : true;
 
-          let playlistIDr = songName.match(/youtube.com\/playlist\?list=(.*)/);
-          if (playlistIDr) {
-            let playlist;
-            try {
-              playlist = await ytfps(playlistIDr[1]);
-            } catch {
-              embed.setTitle("Couldn't find provided playlist");
-              int.reply({ embeds: [embed] });
-              return;
-            }
-            let parsedSongs: song[] = [];
-            for (let song of playlist.videos) {
-              parsedSongs.push({
-                title: song.title || "undefined",
-                length: song.length || "undefined",
-                published: "undefined",
-                views: "undefined",
-                thumbnail: song.thumbnail_url,
-                url: song.url,
-                addingUser: int.user.username,
-                author: {
-                  name: song.author.name || "undefined",
-                  url: song.author.url || "undefined",
-                },
-              });
-            }
-            embed
-              .setTitle("Playlist added to the queue")
-              .setDescription(`[${playlist.title}](${playlist.url})`)
-              .setThumbnail(playlist.thumbnail_url)
-              .setFields([
-                { name: "author", value: playlist.isAlbum ? "unknown" : `[${playlist.author.name}](${playlist.author.url})`, inline: true },
-                { name: "count", value: String(playlist.video_count), inline: true },
-              ]);
-            onTop ? this.outer.queue.unshift(...parsedSongs) : this.outer.queue.push(...parsedSongs);
-            this.outer.updateCurrentPage();
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-          let searchedSongs = (await ytf.search(songName)).slice(0, 10);
-          if (!searchedSongs.length) {
-            embed.setTitle("Couln't find provided song");
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-          if (!isSearch) {
-            embed
-              .setTitle("Song added to the queue")
-              .setDescription(`[${searchedSongs[0].title}](${searchedSongs[0].url})`)
-              .setThumbnail(searchedSongs[0].thumbnail)
-              .setFields([
-                { name: "channel", value: `[${searchedSongs[0].author.name}](${searchedSongs[0].author.url})`, inline: true },
-                { name: "length", value: `${searchedSongs[0].length}`, inline: true },
-                { name: "position in queue", value: `${onTop ? 1 : this.outer.queue.length + 1}`, inline: true },
-              ]);
-            searchedSongs[0].addingUser = int.user.username;
-            onTop ? this.outer.queue.unshift(searchedSongs[0]) : this.outer.queue.push(searchedSongs[0]);
-            this.outer.updateCurrentPage();
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-          embed.setTitle(`Search results for: ${songName}`).setFields(
-            searchedSongs.map((value, index) => {
-              return { name: `channel: ${value.author.name} | length: ${value.length} | ${value.views}`, value: `${index + 1}. [${value.title}](${value.url})` };
-            })
-          );
-          let selectMenu = new Discord.SelectMenuBuilder()
-            .setCustomId("assm")
-            .setMaxValues(1)
-            .setMinValues(1)
-            .setPlaceholder("select song to add")
-            .setOptions(
-              searchedSongs.map((value, index) => {
-                return { label: `${index + 1}. ${value.title}`.slice(0, 99), value: `${index}` };
-              })
-            );
-          let actionRow = new Discord.ActionRowBuilder<Discord.SelectMenuBuilder>({ components: [selectMenu] });
-
-          let message = await int.reply({ embeds: [embed], components: [actionRow], fetchReply: true });
-          let collector = message.createMessageComponentCollector({ time: 300000 });
-          collector.on("collect", async (cInt: Discord.SelectMenuInteraction) => {
-            let selectedSong = searchedSongs[Number(cInt.values[0])];
-            selectedSong.addingUser = cInt.user.username;
-            embed
-              .setTitle("Adding song to the queue")
-              .setDescription(`[${selectedSong.title}](${selectedSong.url})`)
-              .setThumbnail(selectedSong.thumbnail)
-              .setFields([
-                { name: "channel", value: `[${selectedSong.author.name}](${selectedSong.author.url})`, inline: true },
-                { name: "length", value: `${selectedSong.length}`, inline: true },
-                { name: "position in queue", value: `${onTop ? 1 : this.outer.queue.length + 1}`, inline: true },
-              ]);
-            onTop ? this.outer.queue.unshift(selectedSong) : this.outer.queue.push(selectedSong);
-            this.outer.updateCurrentPage();
-            int.followUp({ embeds: [embed], ephemeral: true });
-            collector.stop();
+      let playlistIDr = songName.match(/youtube.com\/playlist\?list=(.*)/);
+      if (playlistIDr) {
+        let playlist;
+        try {
+          playlist = await ytfps(playlistIDr[1]);
+        } catch {
+          embed.setTitle("Couldn't find provided playlist");
+          await int.reply({ embeds: [embed] });
+          return;
+        }
+        let parsedSongs: song[] = [];
+        for (let song of playlist.videos) {
+          parsedSongs.push({
+            title: song.title || "undefined",
+            length: song.length || "undefined",
+            published: "undefined",
+            views: "undefined",
+            thumbnail: song.thumbnail_url,
+            url: song.url,
+            addingUser: int.user.username,
+            author: {
+              name: song.author.name || "undefined",
+              url: song.author.url || "undefined",
+            },
           });
+        }
+        embed
+          .setTitle("Playlist added to the queue")
+          .setDescription(`[${playlist.title}](${playlist.url})`)
+          .setThumbnail(playlist.thumbnail_url)
+          .setFields([
+            { name: "author", value: playlist.isAlbum ? "unknown" : `[${playlist.author.name}](${playlist.author.url})`, inline: true },
+            { name: "count", value: String(playlist.video_count), inline: true },
+          ]);
+        onTop ? this.outer.queue.unshift(...parsedSongs) : this.outer.queue.push(...parsedSongs);
+        await this.outer.updateCurrentPage();
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      let searchedSongs = (await ytf.search(songName)).slice(0, 10);
+      if (!searchedSongs.length) {
+        embed.setTitle("Couln't find provided song");
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      if (!isSearch) {
+        embed
+          .setTitle("Song added to the queue")
+          .setDescription(`[${searchedSongs[0].title}](${searchedSongs[0].url})`)
+          .setThumbnail(searchedSongs[0].thumbnail)
+          .setFields([
+            { name: "channel", value: `[${searchedSongs[0].author.name}](${searchedSongs[0].author.url})`, inline: true },
+            { name: "length", value: `${searchedSongs[0].length}`, inline: true },
+            { name: "position in queue", value: `${onTop ? 1 : this.outer.queue.length + 1}`, inline: true },
+          ]);
+        searchedSongs[0].addingUser = int.user.username;
+        onTop ? this.outer.queue.unshift(searchedSongs[0]) : this.outer.queue.push(searchedSongs[0]);
+        this.outer.updateCurrentPage();
+        int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      embed.setTitle(`Search results for: ${songName}`).setFields(
+        searchedSongs.map((value, index) => {
+          return { name: `channel: ${value.author.name} | length: ${value.length} | ${value.views}`, value: `${index + 1}. [${value.title}](${value.url})` };
+        })
+      );
+      let selectMenu = new Discord.SelectMenuBuilder()
+        .setCustomId("assm")
+        .setMaxValues(1)
+        .setMinValues(1)
+        .setPlaceholder("select song to add")
+        .setOptions(
+          searchedSongs.map((value, index) => {
+            return { label: `${index + 1}. ${value.title}`.slice(0, 99), value: `${index}` };
+          })
+        );
+      let actionRow = new Discord.ActionRowBuilder<Discord.SelectMenuBuilder>({ components: [selectMenu] });
 
-          collector.on("end", () => {
-            message.delete().catch(() => {});
-          });
+      let message = await int.reply({ embeds: [embed], components: [actionRow], fetchReply: true });
+      let collector = message.createMessageComponentCollector({ time: 300000 });
 
-          collector.on("error", async (error) => {
-            this.outer.originalInteraction.followUp({ embeds: [this.outer.bot.misc.errorEmbed(Music.commandName, error)] });
-          });
-        }).catch(() => {});
+      collector.on("collect", async (cInt: Discord.SelectMenuInteraction) => {
+        let selectedSong = searchedSongs[Number(cInt.values[0])];
+        selectedSong.addingUser = cInt.user.username;
+        embed
+          .setTitle("Adding song to the queue")
+          .setDescription(`[${selectedSong.title}](${selectedSong.url})`)
+          .setThumbnail(selectedSong.thumbnail)
+          .setFields([
+            { name: "channel", value: `[${selectedSong.author.name}](${selectedSong.author.url})`, inline: true },
+            { name: "length", value: `${selectedSong.length}`, inline: true },
+            { name: "position in queue", value: `${onTop ? 1 : this.outer.queue.length + 1}`, inline: true },
+          ]);
+        onTop ? this.outer.queue.unshift(selectedSong) : this.outer.queue.push(selectedSong);
+        this.outer.updateCurrentPage();
+        await int.followUp({ embeds: [embed], ephemeral: true });
+        collector.stop();
+      });
+
+      collector.on("end", async () => {
+        await message.delete().catch(() => {});
+      });
+
+      this.outer.bot.misc.collectorErrorHandler(Music.commandName, this.outer.originalMessage, collector, this.outer.originalInteraction);
+
     }
     async player_loop(interaction: Discord.MessageComponentInteraction): Promise<void> {
       let textInput1 = new Discord.TextInputBuilder()
@@ -658,30 +660,27 @@ export default class Music extends CommandT {
         .setComponents(actionRow1);
 
       await interaction.showModal(modal);
-      interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 })
-        .then(async (int) => {
-          let embed = new Discord.EmbedBuilder()
-            .setColor(0xff0000)
-            .setAuthor({ name: `Music manager | loop`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
+      let int = await interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 }).catch(() => undefined)
+      if(!int) return;
+      let embed = new Discord.EmbedBuilder()
+        .setColor(0xff0000)
+        .setAuthor({ name: `Music manager | loop`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" })
 
-          let loopStr = int.fields.getTextInputValue("1");
-          let loop = Number(loopStr);
-
-          if (!this.outer.bot.misc.isPositiveInt(loopStr)) {
-            embed.setTitle("Amount of loops must be a positive number");
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-          this.outer.loopnum = loop;
-          let cBuilder = await this.outer.updateCurrentPage(true);
-          //@ts-ignore
-          int.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
-        })
-        .catch(() => {});
+      let loopStr = int.fields.getTextInputValue("1");
+      let loop = Number(loopStr)
+      if (!this.outer.bot.misc.isPositiveInt(loopStr)) {
+        embed.setTitle("Amount of loops must be a positive number");
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      this.outer.loopnum = loop;
+      let cBuilder = await this.outer.updateCurrentPage(true);
+      await int.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
+
     async player_stop(interaction: Discord.MessageComponentInteraction): Promise<void> {
       this.outer.vc?.connection?.disconnect();
-      interaction.deferUpdate();
+      await interaction.deferUpdate();
     }
 
     async queue_shuffle(interaction: Discord.MessageComponentInteraction): Promise<void> {
@@ -716,62 +715,60 @@ export default class Music extends CommandT {
         .setComponents(actionRow1, actionRow2);
 
       await interaction.showModal(modal);
+      let int = await interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 }).catch(() => undefined)
+      if (!int) return;
 
-      interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 })
-        .then(async (int) => {
-          let positionStr = int.fields.getTextInputValue("1");
-          let position = Number(positionStr);
-          let onTop = int.fields.getTextInputValue("2").length == 0 ? false : true;
+      let positionStr = int.fields.getTextInputValue("1");
+      let position = Number(positionStr);
+      let onTop = int.fields.getTextInputValue("2").length == 0 ? false : true;
 
-          let embed = new Discord.EmbedBuilder()
-            .setColor(0xff0000)
-            .setAuthor({ name: "Music manager | repeat from history", iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
+      let embed = new Discord.EmbedBuilder()
+        .setColor(0xff0000)
+        .setAuthor({ name: "Music manager | repeat from history", iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
 
-          if (!this.outer.bot.misc.isPositiveInt(positionStr)) {
-            embed.setTitle("Position must be positive a number.");
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-          if (position == 0) {
-            onTop ? this.outer.queue.unshift(...this.outer.history) : this.outer.queue.push(...this.outer.history);
-            embed
-              .setTitle("All songs from history added to the queue")
-              .setDescription(`**Added in total:** ${this.outer.history.length}`);
-            await this.outer.updateCurrentPage();
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-          if (position > this.outer.history.length) {
-            embed.setTitle(`There's no song at position ${position}`);
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
+      if (!this.outer.bot.misc.isPositiveInt(positionStr)) {
+        embed.setTitle("Position must be positive a number.");
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      if (position == 0) {
+        onTop ? this.outer.queue.unshift(...this.outer.history) : this.outer.queue.push(...this.outer.history);
+        embed
+          .setTitle("All songs from history added to the queue")
+          .setDescription(`**Added in total:** ${this.outer.history.length}`);
+        await this.outer.updateCurrentPage();
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      if (position > this.outer.history.length) {
+        embed.setTitle(`There's no song at position ${position}`);
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      onTop ? this.outer.queue.unshift(this.outer.history[position - 1]) : this.outer.queue.push(this.outer.history[position - 1]);
+      embed
+        .setTitle(`The song successfully added to the queue`)
+        .setDescription(`**Song:** ${this.outer.history[position - 1].title}`);
 
-          onTop ? this.outer.queue.unshift(this.outer.history[position - 1]) : this.outer.queue.push(this.outer.history[position - 1]);
-          embed
-            .setTitle(`The song successfully added to the queue`)
-            .setDescription(`**Song:** ${this.outer.history[position - 1].title}`);
-          int.reply({ embeds: [embed], ephemeral: true });
-          await this.outer.updateCurrentPage();
-        })
-        .catch(() => {});
+      await int.reply({ embeds: [embed], ephemeral: true });
+      await this.outer.updateCurrentPage();
     }
 
     async hq_pageSelector(interaction: Discord.SelectMenuInteraction, isQueue?: boolean): Promise<void> {
       let cBuilder = this.outer.cBuilders.hqBuilder(Number(interaction.values[0]), isQueue);
-      interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
+      await interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
 
     async hq_pageDown(interaction: Discord.MessageComponentInteraction, isQueue?: boolean): Promise<void> {
       let currentPage = Number(interaction.message.embeds[0].footer.text.split("[")[1].split("/")[0]);
       let cBuilder = this.outer.cBuilders.hqBuilder(currentPage - 1, isQueue);
-      interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
+      await interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
 
     async hq_pageUp(interaction: Discord.MessageComponentInteraction, isQueue?: boolean): Promise<void> {
       let currentPage = Number(interaction.message.embeds[0].footer.text.split("[")[1].split("/")[0]);
       let cBuilder = this.outer.cBuilders.hqBuilder(currentPage + 1, isQueue);
-      interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
+      await interaction.update({ embeds: cBuilder.embeds, components: cBuilder.actionRows });
     }
 
     async hq_remove(interaction: Discord.MessageComponentInteraction, isQueue?: boolean): Promise<void> {
@@ -795,56 +792,52 @@ export default class Music extends CommandT {
         .setComponents(actionRow1, actionRow2);
 
       await interaction.showModal(modal);
-      interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 })
-        .then(async (int) => {
-          let queueOrHistory: song[] = isQueue ? this.outer.queue : this.outer.history;
+      let int = await interaction.awaitModalSubmit({ filter: (int) => int.customId == modID, time: 60000 }).catch(() => undefined)
+      if(!int) return;
 
-          let positionStr = int.fields.getTextInputValue("1");
-          let position = Number(positionStr);
-          let allOccurrences = int.fields.getTextInputValue("2").length == 0 ? false : true;
+      let queueOrHistory: song[] = isQueue ? this.outer.queue : this.outer.history;
+      let positionStr = int.fields.getTextInputValue("1");
+      let position = Number(positionStr);
+      let allOccurrences = int.fields.getTextInputValue("2").length == 0 ? false : true;
 
-          let embed = new Discord.EmbedBuilder()
-            .setColor(0xff0000)
-            .setAuthor({ name: `Music manager | remove from ${isQueue ? "queue" : "History"}`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
+      let embed = new Discord.EmbedBuilder()
+        .setColor(0xff0000)
+        .setAuthor({ name: `Music manager | remove from ${isQueue ? "queue" : "History"}`, iconURL: "https://www.youtube.com/s/desktop/ef1623de/img/favicon_144x144.png", url: "https://www.youtube.com/" });
 
-          if (!this.outer.bot.misc.isPositiveInt(positionStr)) {
-            embed.setTitle("Position must be a number.");
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
+      if (!this.outer.bot.misc.isPositiveInt(positionStr)) {
+        embed.setTitle("Position must be a number.");
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      if (position == 0) {
+        isQueue ? (this.outer.queue = []) : (this.outer.history = []);
+        embed.setTitle(`${isQueue ? "Queue" : "History"} removed.`);
+        await this.outer.updateCurrentPage();
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      if (position > queueOrHistory.length) {
+        embed.setTitle(`There's no song at position ${position}`);
+        await int.reply({ embeds: [embed], ephemeral: true });
+        return;
+      }
+      let removedSong = queueOrHistory[position - 1];
+      if (allOccurrences) {
+        let newQOH = queueOrHistory.filter((song) => song.title != queueOrHistory[position - 1].title);
+        let removedInTotal = queueOrHistory.length - newQOH.length;
+        isQueue ? (this.outer.queue = newQOH) : (this.outer.history = newQOH);
+        embed
+          .setTitle("Successfully removed all occurrences of the song")
+          .setDescription(`**Song:** [${removedSong.title}]\n**Removed in total:** ${removedInTotal}`);
+      } else {
+        isQueue ? this.outer.queue.splice(position - 1, 1) : this.outer.history.splice(position - 1, 1);
+        embed
+          .setTitle("Successfully removed the song at position ${position}")
+          .setDescription(`**Song:** [${removedSong.title}]`);
+      }
+      await this.outer.updateCurrentPage();
+      await int.reply({ embeds: [embed], ephemeral: true });
 
-          if (position == 0) {
-            isQueue ? (this.outer.queue = []) : (this.outer.history = []);
-            embed.setTitle(`${isQueue ? "Queue" : "History"} removed.`);
-            await this.outer.updateCurrentPage();
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-
-          if (position > queueOrHistory.length) {
-            embed.setTitle(`There's no song at position ${position}`);
-            int.reply({ embeds: [embed], ephemeral: true });
-            return;
-          }
-
-          let removedSong = queueOrHistory[position - 1];
-          if (allOccurrences) {
-            let newQOH = queueOrHistory.filter((song) => song.title != queueOrHistory[position - 1].title);
-            let removedInTotal = queueOrHistory.length - newQOH.length;
-            isQueue ? (this.outer.queue = newQOH) : (this.outer.history = newQOH);
-            embed
-              .setTitle("Successfully removed all occurrences of the song")
-              .setDescription(`**Song:** [${removedSong.title}]\n**Removed in total:** ${removedInTotal}`);
-          } else {
-            isQueue ? this.outer.queue.splice(position - 1, 1) : this.outer.history.splice(position - 1, 1);
-            embed
-              .setTitle("Successfully removed the song at position ${position}")
-              .setDescription(`**Song:** [${removedSong.title}]`);
-          }
-          await this.outer.updateCurrentPage();
-          int.reply({ embeds: [embed], ephemeral: true });
-        })
-        .catch(() => {});
     }
     async queue_pageSelector(interaction: Discord.SelectMenuInteraction): Promise<void> { this.hq_pageSelector(interaction, true) }
     async queue_pageDown(interaction: Discord.MessageComponentInteraction): Promise<void> { this.hq_pageDown(interaction, true) }

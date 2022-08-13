@@ -109,20 +109,18 @@ export default class Gelbooru extends CommandT {
       content: this.cBuilderM.content,
       components: this.cBuilderM.actionRows,
     });
-    await this.startCollectors();
+    this.startCollectors();
   }
 
-  private async startCollectors(): Promise<void> {
+  private startCollectors(): void {
     this.interCollector = this.originalMessage.createMessageComponentCollector({ idle: 3600000 });
 
-    this.interCollector.on("collect", async (interaction) => {
-      this.handlers[interaction.customId as keyof Gelbooru['handlers']](interaction)
+    this.interCollector.on("collect", async interaction => {
+      await this.handlers[interaction.customId as keyof Gelbooru['handlers']](interaction)
     });
 
     this.interCollector.on("end", async (_, reason) => await this.onCollectorStop(reason));
-    this.interCollector.on("error", async (error) => {
-      await this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Gelbooru.commandName, error)] });
-    });
+    this.bot.misc.collectorErrorHandler(Gelbooru.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
 
   private async onCollectorStop(reason: string): Promise<void> {
@@ -138,7 +136,7 @@ export default class Gelbooru extends CommandT {
     this.components.lockButton.setDisabled(true);
     this.components.commentSelector.setDisabled(true);
 
-    this.originalMessage.edit({ components: this.cBuilderM.commentEmbeds.length ? [this.actionRows.mainRow] : [this.actionRows.commentRow, this.actionRows.mainRow] }).catch(() => {});
+    await this.originalMessage.edit({ components: this.cBuilderM.actionRows }).catch(() => {});
   }
 
   private handlers = new class{
@@ -148,8 +146,8 @@ export default class Gelbooru extends CommandT {
       if(this.outer.wasLockButtonUsed){
         this.outer.actionRows.mainRow.components.splice(0, 1);
         await interaction.update({ components: this.outer.cBuilderM.actionRows });
-        new Gelbooru(this.outer.originalInteraction, this.outer.bot).main();
         if (!this.outer.cBuilderM.commentEmbeds) this.outer.interCollector.stop()
+        await new Gelbooru(this.outer.originalInteraction, this.outer.bot).main();
         return;
       }
       this.outer.components.commentSelector.setDisabled(true);
@@ -304,7 +302,7 @@ export default class Gelbooru extends CommandT {
         .setDescription( `**Response status code**: ${ret.rCode}\n**Reason**: ${ret.message}`.slice(0, 4096));
       return {
         embeds: [embed],
-        commentEmbeds: undefined,
+        commentEmbeds: [],
         content: "⠀",
         actionRows: [this.actionRows.mainRow],
       };

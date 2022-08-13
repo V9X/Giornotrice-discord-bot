@@ -27,7 +27,7 @@ export default class SauceNao extends CommandT {
     return command
   }
   static async run(int: Discord.MessageContextMenuCommandInteraction, bot: Bot): Promise<void> {
-    new SauceNao(int, bot).main();
+    await new SauceNao(int, bot).main();
   }
 
   constructor(private originalInteraction: Discord.MessageContextMenuCommandInteraction, private bot: Bot) { super() }
@@ -94,17 +94,15 @@ export default class SauceNao extends CommandT {
     this.startCollectors();
   }
 
-  private async startCollectors(): Promise<void> {
+  private startCollectors(): void {
     this.interCollector = this.originalMessage.createMessageComponentCollector({ idle: 3600000 });
 
-    this.interCollector.on("collect", interaction => {
-      this.handlers[interaction.customId as keyof SauceNao['handlers']](interaction)
+    this.interCollector.on("collect", async interaction => {
+      await this.handlers[interaction.customId as keyof SauceNao['handlers']](interaction)
     });
 
-    this.interCollector.on("end", (_, reason) => this.onCollectorStop(reason));
-    this.interCollector.on("error", (error) => {
-      this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(SauceNao.commandName, error)] });
-    });
+    this.interCollector.on("end", async (_, reason) => await this.onCollectorStop(reason));
+    this.bot.misc.collectorErrorHandler(SauceNao.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
 
   private async onCollectorStop(reason: String): Promise<void> {
@@ -116,7 +114,7 @@ export default class SauceNao extends CommandT {
         return;
     }
     this.components.pageSelector.setDisabled(true);
-    this.originalMessage.edit({ components: [this.actionRows.selectorActionRow] }).catch(() => {});
+    await this.originalMessage.edit({ components: [this.actionRows.selectorActionRow] }).catch(() => {});
   }
 
   private handlers = new class {
@@ -126,6 +124,7 @@ export default class SauceNao extends CommandT {
       this.outer.components.pageSelector.setPlaceholder( `page ${Number(interaction.values[0]) + 1}` );
       await interaction.update({ embeds: [this.outer.embeds[Number(interaction.values[0])]] });
     }
+
   }(this)
 
   private prepareEmbeds(data: post[]): Discord.EmbedBuilder[] {

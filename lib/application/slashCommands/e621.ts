@@ -100,20 +100,18 @@ export default class E621 extends CommandT {
       content: cBuilder.content,
       components: [this.actionRows.mainRow],
     });
-    await this.startCollectors();
+    this.startCollectors();
   }
 
-  private async startCollectors(): Promise<void> {
+  private startCollectors(): void {
     this.interCollector = this.originalMessage.createMessageComponentCollector({ idle: 3600000 });
 
-    this.interCollector.on("collect", async (interaction) => {
-      this.handlers[interaction.customId as keyof E621['handlers']](interaction)
+    this.interCollector.on("collect", async interaction => {
+      await this.handlers[interaction.customId as keyof E621['handlers']](interaction)
     });
 
-    this.interCollector.on("end", async (_, reason) => await this.onCollectorStop(reason) );
-    this.interCollector.on("error", async (error) => { 
-      await this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(E621.commandName, error)] })
-    });
+    this.interCollector.on("end", async (_, reason) => await this.onCollectorStop(reason));
+    this.bot.misc.collectorErrorHandler(E621.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
 
   private async onCollectorStop(reason: string): Promise<void> {
@@ -124,11 +122,11 @@ export default class E621 extends CommandT {
       default:
         return;
     }
-    this.components.deleteButton.setDisabled(false);
-    this.components.lockButton.setDisabled(false);
-    this.components.refreshButton.setDisabled(false);
+    this.components.deleteButton.setDisabled(true);
+    this.components.lockButton.setDisabled(true);
+    this.components.refreshButton.setDisabled(true);
 
-    this.originalMessage.edit({ components: [this.actionRows.mainRow] }).catch(() => {});
+    await this.originalMessage.edit({ components: [this.actionRows.mainRow] }).catch(() => {});
   }
 
   private handlers = new class{
@@ -139,7 +137,7 @@ export default class E621 extends CommandT {
         this.outer.actionRows.mainRow.components.splice(0, 1);
         await interaction.update({ components: [this.outer.actionRows.mainRow] });
   
-        new E621(this.outer.originalInteraction, this.outer.bot).main();
+        await new E621(this.outer.originalInteraction, this.outer.bot).main();
         this.outer.interCollector.stop("locked");
         return;
       }

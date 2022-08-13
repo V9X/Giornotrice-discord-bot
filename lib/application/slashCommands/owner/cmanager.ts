@@ -22,11 +22,13 @@ export default class CManager extends CommandT {
 
   static async run(int: Discord.ChatInputCommandInteraction, bot: Bot): Promise<void> {
     if (int.user.id == process.env.ownerId) {
+      let cmi = new CManager(int, bot);
+
       switch (int.options.getSubcommand(false)) {
-        case "list": await new CManager(int, bot).list(); break;
-        case "deploy": await new CManager(int, bot).deploy(); break;
-        case "remove": await new CManager(int, bot).remove(); break;
-        case "removeall": await new CManager(int, bot).removeAll(); break;
+        case "list": await cmi.list(); break;
+        case "deploy": await cmi.deploy(); break;
+        case "remove": await cmi.remove(); break;
+        case "removeall": await cmi.removeAll(); break;
       }
     } else
       await int.reply({ embeds: [ new Discord.EmbedBuilder().setTitle("no").setDescription("just no") ], ephemeral: true });
@@ -74,7 +76,7 @@ export default class CManager extends CommandT {
       this.embed
         .setTitle('cmanager | deploy')
         .setDescription('Provided command name(s) does not exists');
-      this.originalInteraction.editReply({ embeds: [this.embed]});
+      await this.originalInteraction.editReply({ embeds: [this.embed]});
       return;
     }
 
@@ -84,7 +86,7 @@ export default class CManager extends CommandT {
       .setTitle('cmanager | deploy')
       .setDescription(`Guild ID(s): ${IDS ? IDS.join(', ') : 'global'}\n\nCommands: ${comNames.join(', ')}`);
 
-    this.originalInteraction.editReply({ embeds: [this.embed] });
+    await this.originalInteraction.editReply({ embeds: [this.embed] });
   }
 
   private async remove(): Promise<void> {
@@ -92,8 +94,6 @@ export default class CManager extends CommandT {
     
     let comNames = this.originalInteraction.options.getString("name").trim().split(" ");
     let IDS = this.originalInteraction.options.getString("guild")?.trim()?.split(" ");
-
-    let adlist: string[] = []
 
     if (comNames[0] == "ALL") {
       let names = Object.keys(this.bot.commands);
@@ -111,7 +111,6 @@ export default class CManager extends CommandT {
 
   private async removeAll(): Promise<void> {
     await this.originalInteraction.deferReply();
-
     await this.bot.cm.removeAll();
 
     let embed = new Discord.EmbedBuilder()

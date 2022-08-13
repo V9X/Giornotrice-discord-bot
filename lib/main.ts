@@ -22,37 +22,42 @@ export class Bot extends Discord.Client {
       presence: presence,
     });
     this.misc = new mainUtils(this);
+
+    process.on("unhandledRejection", (error: Error) => { this.misc.sendWebhookError(error) })
+    process.on("uncaughtException", (error: Error) => { this.misc.sendWebhookError(error) })
+
     this.main();
   }
 
   private async main() {
     this.commands = await this.misc.importCommands("./lib/application");
 
-    this.on("ready", async () => {
+    this.on("ready", () => {
       this.cm = new commandManager(this);
       console.log(`Logged as ${this.user.username}`);
-      await this.cm.deployCommands([this.commands["cmanager"]], [process.env.ownerServerId]);
+      this.cm.deployCommands([this.commands["cmanager"]], [process.env.ownerServerId]);
     });
 
     this.on("interactionCreate", async (interaction) => {
       if (interaction.type == Discord.InteractionType.ApplicationCommand) {
         for (let command of Object.values(this.commands)) {
-          try {
-            if (interaction.commandName == command.commandName) {
-              command.run(interaction, this);
-            }
-          } catch (e) {
-            interaction.replied
-              ? interaction.deferred
-                ? interaction.editReply({ embeds: [this.misc.errorEmbed(command.commandName, e)] })
-                : interaction.followUp({ embeds: [this.misc.errorEmbed(command.commandName, e)] })
-              : interaction.reply({ embeds: [this.misc.errorEmbed(command.commandName, e)] });
+          if (interaction.commandName != command.commandName) continue;
+          try { await command.run(interaction, this) } 
+          catch (error) {
+            let errorEmbed = this.misc.userErrorEmbed(command.commandName, error as Error);
+            this.misc.sendWebhookError(error as Error, command.commandName, interaction);
+            if (interaction.replied){
+              try { interaction.fetchReply().then(msg => {msg.reply({ embeds: [errorEmbed] })}) }
+              catch { interaction.channel.send({ embeds: [errorEmbed] }).catch(() => {}) }
+            } else interaction.reply({ embeds: [errorEmbed] });
           }
         }
       } else if (interaction.type == Discord.InteractionType.ApplicationCommandAutocomplete) {
         for (let command of Object.values(this.commands)) {
           if (command.commandName == interaction.commandName) {
-            command.autoComplete(interaction).catch(() => {});
+            command.autoComplete(interaction).catch((error: Error) => {
+              this.misc.sendWebhookError(error, command.commandName, interaction)
+            });
           }
         }
       }

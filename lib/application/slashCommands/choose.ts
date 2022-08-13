@@ -40,6 +40,6 @@ export default class Choose extends CommandT {
       .setDescription(resps[Math.floor(Math.random() * resps.length)].slice(0, 4096))
       .setFooter({ text: `Choices: ${opt.join(", ")}`.slice(0, 2048) });
       
-    this.originalInteraction.reply({ embeds: [embed] });
+    await this.originalInteraction.reply({ embeds: [embed] });
   }
 }

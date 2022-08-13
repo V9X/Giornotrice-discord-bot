@@ -61,19 +61,17 @@ export default class Delet extends CommandT {
       .setTitle('Searching complete');
 
     await this.originalMessage.edit({ embeds: [this.embed], components: [this.actionRows.confirmRow] });
-    await this.startCollectors();
+    this.startCollectors();
   }
 
-  private async startCollectors(): Promise<void> {
+  private startCollectors(): void {
     this.interCollector = this.originalMessage.createMessageComponentCollector({ time: 600000 });
 
-    this.interCollector.on("collect", async (interaction) => {
-      this.handlers[interaction.customId as keyof Delet['handlers']](interaction)
+    this.interCollector.on("collect", async interaction => {
+      await this.handlers[interaction.customId as keyof Delet['handlers']](interaction)
     });
     this.interCollector.on("end", async (_, reason) => await this.onCollectorStop(reason));
-    this.interCollector.on("error", async (error) => {
-      await this.originalInteraction.followUp({ embeds: [this.bot.misc.errorEmbed(Delet.commandName, error)] });
-    });
+    this.bot.misc.collectorErrorHandler(Delet.commandName, this.originalMessage, this.interCollector, this.originalInteraction);
   }
   private async onCollectorStop(reason: string): Promise<void> {
     switch (reason) {
@@ -88,7 +86,7 @@ export default class Delet extends CommandT {
       default:
         return;
     }
-    this.originalMessage.edit({ embeds: [this.embed], components: [] }).catch(() => {});
+    await this.originalMessage.edit({ embeds: [this.embed], components: [] }).catch(() => {});
   }
   private handlers = new class{
     constructor(private outer: Delet) {}

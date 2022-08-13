@@ -57,6 +57,6 @@ e621api= 'username apiKey' (optional)
 1. Discord bot token.
 2. ID of the user who should be able to use owner commands.
 3. ID of the server in which the command manager should be added.
-4. Discord webhook to which unhandled errors will be sent (there should be none).
+4. Discord webhook to which all errors will be sent.
 5. Api key for saucenao command [generate here](https://saucenao.com/user.php?page=search-api)
 6. login info for e621 command [more info here](https://e621.net/help/api)

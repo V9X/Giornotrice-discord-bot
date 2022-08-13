@@ -28,7 +28,8 @@ export default class Ev extends CommandT {
     let content = this.originalInteraction.options.getString("expression");
     let priv = this.originalInteraction.options.getBoolean("private");
 
-    if (content) { await this.evaluate(this.originalInteraction, content, priv);
+    if (content) { 
+      await this.evaluate(this.originalInteraction, content, priv);
     } else {
       let modid = this.bot.misc.generateID(16);
 
@@ -53,13 +54,11 @@ export default class Ev extends CommandT {
         
       await this.originalInteraction.showModal(modal);
 
-      this.originalInteraction.awaitModalSubmit({ filter: (int: Discord.ModalSubmitInteraction) => int.customId == modid, time: 3600000 })
-        .then(async (int: Discord.ModalSubmitInteraction) => {
-          let content = int.fields.getTextInputValue("1").replace("\n", ";");
-          let isPriv = int.fields.getTextInputValue("2").length == 0 ? false : true
-          await this.evaluate(int, content, isPriv);
-        })
-        .catch(() => {});
+      let int = await this.originalInteraction.awaitModalSubmit({ filter: (int: Discord.ModalSubmitInteraction) => int.customId == modid, time: 3600000 }).catch(() => undefined)
+      if(!int) return;
+      let content = int.fields.getTextInputValue("1").replace("\n", ";");
+      let isPriv = int.fields.getTextInputValue("2").length == 0 ? false : true;
+      await this.evaluate(int, content, isPriv);
     }
   }
   private async evaluate(int: Discord.ModalSubmitInteraction | Discord.CommandInteraction, content: string, priv: boolean): Promise<void> {
