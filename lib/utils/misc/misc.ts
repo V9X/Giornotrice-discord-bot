@@ -35,7 +35,7 @@ export default class misc {
   public userErrorEmbed = (commandName: string | undefined, error: Error) => {
     return new Discord.EmbedBuilder({
       title: `Error was encountered while running "${commandName}" command`,
-      description: error.name ? `**Name:** \`${error.name} \n**message: \`${error.message}\`` : `**name:** \`${error}\``,
+      description: error.name ? `**Name:** \`${error.name}\` \n**message:** \`${error.message}\`` : `**name:** \`${error}\``,
     })
   }
 

@@ -327,8 +327,11 @@ export default class Music extends CommandT {
               name: `Channel: ${song.author.name}, Length: ${song.length} | Added by ${song.addingUser}`,
               value: `${index + 1}. [${song.title}](${song.url})`,
             };
-          })
+          }),
         );
+        if(this.outer.queue.length > 4) {
+          embed.addFields({name: "⠀", value: `${this.outer.queue.length - 4} more in queue.`})
+        }
 
       this.outer.vc
         ? this.outer.components.player.play.setEmoji("⏸️")
@@ -449,7 +452,9 @@ export default class Music extends CommandT {
             { label: `page [${index + 1}/${pages}]`, value: String(index + 1) }
           ));
         }
-        this.outer.components.queue.pageSelector.setOptions(selectMenuOptions).setPlaceholder(`Page [${page}/${pages}]`);
+        isQueue
+          ? this.outer.components.queue.pageSelector.setOptions(selectMenuOptions).setPlaceholder(`Page [${page}/${pages}]`)
+          : this.outer.components.history.pageSelector.setOptions(selectMenuOptions).setPlaceholder(`Page [${page}/${pages}]`);
       }
 
       return {
