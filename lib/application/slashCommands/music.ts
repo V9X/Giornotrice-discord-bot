@@ -330,7 +330,7 @@ export default class Music extends CommandT {
           }),
         );
         if(this.outer.queue.length > 4) {
-          embed.addFields({name: "⠀", value: `${this.outer.queue.length - 4} more in queue.`})
+          embed.addFields({name: "⠀", value: `${this.outer.queue.length - 4} more in queue.`});
         }
 
       this.outer.vc
