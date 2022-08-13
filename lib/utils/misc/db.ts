@@ -44,7 +44,7 @@ export class musicDB extends seq.Model {
   }
 
   static async replaceData(serverID: string, queue: song[], history: song[]): Promise<void> {
-    await this.update({ queue: JSON.stringify(queue), history: JSON.stringify(history) }, { where: { serverID: serverID } });
+    await this.update({ queue: JSON.stringify(queue), history: JSON.stringify(history.slice(0, 500)) }, { where: { serverID: serverID } });
   }
 }
 
