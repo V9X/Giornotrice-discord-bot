@@ -242,13 +242,15 @@ export default class Music extends CommandT {
       return;
     }
     this.vc.stream = stream;
-    let res = voice.createAudioResource(stream);
-    this.vc.player.play(res);
-    await this.updateCurrentPage();
+
     stream.on("end", async () => {
       this.vc.player.stop();
       this.vc.channel.members.size == 1 ? this.vc.connection.disconnect() : await this.player();
     });
+
+    let res = voice.createAudioResource(stream);
+    this.vc.player.play(res);
+    await this.updateCurrentPage();
   }
 
   private async onSongError(error: unknown, song: song): Promise<void> {
