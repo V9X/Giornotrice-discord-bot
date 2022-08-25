@@ -152,7 +152,7 @@ export default class Music extends CommandT {
 
   private async onTimerEnd(): Promise<void> {
     if(!this.vc || this.vc?.player?.state?.status == voice.AudioPlayerStatus.Paused || this.vc?.channel?.members?.size == 1){
-      this.vc && this.vc.connection.disconnect();
+      this.vc && this.vc?.connection?.disconnect();
       this.interCollector.stop('time');
       await this.bot.db.music.replaceData(this.originalInteraction.guildId, this.queue, this.history);
       delete Music.musicInstances[this.originalInteraction.guildId];
@@ -215,7 +215,7 @@ export default class Music extends CommandT {
           this.vc.channel = this.originalInteraction.guild.members.me.voice.channel;
           break;
         case "disconnected":
-          setTimeout(() => { if (!this.originalInteraction.guild.members.me.voice.channelId) this.vc.connection.destroy() }, 1000);
+          setTimeout(() => { if (!this.originalInteraction.guild.members.me.voice.channelId) this.vc?.connection?.destroy() }, 1000);
           break;
         case "destroyed": {
           this.vc.player.stop();
@@ -229,7 +229,7 @@ export default class Music extends CommandT {
   private async player(): Promise<void> {
     this.timer.refresh()
     if (!this.queue[0] && !this.loopnum) {
-      setTimeout(() => { this.vc.connection.disconnect(), 10000 })
+      setTimeout(() => { this.vc?.connection?.disconnect(), 10000 });
       return;
     }
     this.loopnum ? (this.loopnum -= 1) : (this.vc.nowPlaying = this.queue.shift());
@@ -244,8 +244,9 @@ export default class Music extends CommandT {
     this.vc.stream = stream;
 
     stream.on("end", async () => {
+      if(!this.vc) return;
       this.vc.player.stop();
-      this.vc.channel.members.size == 1 ? this.vc.connection.disconnect() : await this.player();
+      this.vc?.channel?.members?.size == 1 ? this.vc?.connection?.disconnect() : await this.player();
     });
 
     let res = voice.createAudioResource(stream);
@@ -546,7 +547,7 @@ export default class Music extends CommandT {
       let onTop = int.fields.getTextInputValue("2").length == 0 ? false : true;
       let isSearch = int.fields.getTextInputValue("3").length == 0 ? false : true;
 
-      let playlistIDr = songName.match(/youtube.com\/playlist\?list=(.*)/);
+      let playlistIDr = songName.match(/youtube\.com\/.*list=([^&]*)/);
       if (playlistIDr) {
         let playlist;
         try {
