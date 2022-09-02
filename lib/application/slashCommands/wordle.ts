@@ -191,7 +191,7 @@ export default class Wordle extends CommandT {
       this.components.answerButton.setDisabled(true)
       this.components.endGameButton.setDisabled(true)
       this.components.publicButton.setDisabled(true)
-      await this.originalMessage.edit({ components: [this.actionRows.mainRow] }).catch(() => {});
+      await this.originalMessage.edit({ embeds: [this.embed], components: [this.actionRows.mainRow] }).catch(() => {});
     }
   }
 

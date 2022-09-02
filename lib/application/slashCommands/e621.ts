@@ -212,7 +212,7 @@ export default class E621 extends CommandT {
         imageUrl: response.data.post.file.url,
         id: response.data.post.id,
         upvotes: response.data.post.score.up,
-        downvotes: response.data.post.score.up,
+        downvotes: response.data.post.score.down,
         favorite: response.data.post.fav_count,
         rating: response.data.post.rating,
         artist: response.data.post.tags.artist,

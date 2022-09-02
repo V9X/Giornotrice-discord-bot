@@ -49,7 +49,7 @@ export class Bot extends Discord.Client {
             if (interaction.replied){
               try { interaction.fetchReply().then(msg => {msg.reply({ embeds: [errorEmbed] })}) }
               catch { interaction.channel.send({ embeds: [errorEmbed] }).catch(() => {}) }
-            } else interaction.reply({ embeds: [errorEmbed] });
+            } else interaction.reply({ embeds: [errorEmbed] }).catch(() => {});
           }
         }
       } else if (interaction.type == Discord.InteractionType.ApplicationCommandAutocomplete) {
