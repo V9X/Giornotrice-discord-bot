@@ -218,6 +218,7 @@ export default class Music extends CommandT {
           setTimeout(() => { if (!this.originalInteraction.guild.members.me.voice.channelId) this.vc?.connection?.destroy() }, 1000);
           break;
         case "destroyed": {
+          this.loopnum = 0;
           this.vc.player.stop();
           this.vc = undefined;
           await this.updateCurrentPage();
