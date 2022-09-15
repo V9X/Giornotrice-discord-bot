@@ -356,7 +356,7 @@ export default class Gelbooru extends CommandT {
         text: [
           `ID: ${ret.postData.id}`,
           `Score: ${ret.postData.score}`,
-          `Rating: ${ret.postData.score}`,
+          `Rating: ${ret.postData.rating}`,
           `Tags: ${ret.postData.tags.join(' ')}`,
         ].join(", ").slice(0, 2048)
       });

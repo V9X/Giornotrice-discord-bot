@@ -244,7 +244,7 @@ export default class E621 extends CommandT {
         .setTitle("Failure")
         .setDescription( `**Response status code**: ${ret.rCode}\n**Reason**: ${ret.message}`.slice(0, 4096));
       return {
-        embeds: [],
+        embeds: [embed],
         content: "⠀"
       }
     }
