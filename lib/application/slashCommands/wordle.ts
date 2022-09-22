@@ -161,8 +161,8 @@ export default class Wordle extends CommandT {
 
     this.msgCollector.on("collect", async (msg) => {
       if (msg.author.id == this.originalInteraction.user.id || this.isButtonPublicActive){
-        await this.onMessage(msg.content);
         setTimeout(() => { msg.delete().catch(() => {}) }, 10);
+        await this.onMessage(msg.content).catch(() => {this.onCollectorStop('dn')});
       };
     });
 

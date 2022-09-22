@@ -444,7 +444,7 @@ export default class Music extends CommandT {
       if (pages > 1) {
         let selectMenuOptions = [];
         if (pages / 25 > 1) {
-          let mn = pages / 24;
+          let mn = pages / 25;
           let x = 1;
           for (let _ of Array(24).fill(0)) {
             selectMenuOptions.push({ label: `page [${Math.round(x)}/${pages}]`, value: `${Math.round(x)}` });
