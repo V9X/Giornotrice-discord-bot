@@ -64,41 +64,42 @@ export default class Wordle extends CommandT {
 
     return command;
   }
+
   static keyboardLocation = {
-    a: [45, 1080, 70, 90],
-    b: [445, 1185, 70, 90],
-    c: [285, 1185, 70, 90],
-    d: [205, 1080, 70, 90],
-    e: [165, 975, 70, 90],
-    f: [285, 1080, 70, 90],
-    g: [365, 1080, 70, 90],
-    h: [445, 1080, 70, 90],
-    i: [565, 975, 70, 90],
-    j: [525, 1080, 70, 90],
-    k: [605, 1080, 70, 90],
-    l: [685, 1080, 70, 90],
-    m: [605, 1185, 70, 90],
-    n: [525, 1185, 70, 90],
-    o: [645, 975, 70, 90],
-    p: [725, 975, 70, 90],
-    q: [5, 975, 70, 90],
-    r: [245, 975, 70, 90],
-    s: [125, 1080, 70, 90],
-    t: [325, 975, 70, 90],
-    u: [485, 975, 70, 90],
-    v: [365, 1185, 70, 90],
-    w: [85, 975, 70, 90],
-    x: [205, 1185, 70, 90],
-    y: [405, 975, 70, 90],
-    z: [125, 1185, 70, 90],
+    a: [45, 1080],
+    b: [445, 1185],
+    c: [285, 1185],
+    d: [205, 1080],
+    e: [165, 975],
+    f: [285, 1080],
+    g: [365, 1080],
+    h: [445, 1080],
+    i: [565, 975],
+    j: [525, 1080],
+    k: [605, 1080],
+    l: [685, 1080],
+    m: [605, 1185],
+    n: [525, 1185],
+    o: [645, 975],
+    p: [725, 975],
+    q: [5, 975],
+    r: [245, 975],
+    s: [125, 1080],
+    t: [325, 975],
+    u: [485, 975],
+    v: [365, 1185],
+    w: [85, 975],
+    x: [205, 1185],
+    y: [405, 975],
+    z: [125, 1185],
   }
   static rowLocation = [
-    [ [5, 5, 150, 150], [165, 5, 150, 150], [325, 5, 150, 150], [485, 5, 150, 150], [645, 5, 150, 150] ],
-    [ [5, 165, 150, 150], [165, 165, 150, 150], [325, 165, 150, 150], [485, 165, 150, 150], [645, 165, 150, 150] ],
-    [ [5, 325, 150, 150], [165, 325, 150, 150], [325, 325, 150, 150], [485, 325, 150, 150], [645, 325, 150, 150] ],
-    [ [5, 485, 150, 150], [165, 485, 150, 150], [325, 485, 150, 150], [485, 485, 150, 150], [645, 485, 150, 150] ],
-    [ [5, 645, 150, 150], [165, 645, 150, 150], [325, 645, 150, 150], [485, 645, 150, 150], [645, 645, 150, 150] ],
-    [ [5, 805, 150, 150], [165, 805, 150, 150], [325, 805, 150, 150], [485, 805, 150, 150], [645, 805, 150, 150] ],
+    [ [5, 5], [165, 5], [325, 5], [485, 5], [645, 5] ],
+    [ [5, 165], [165, 165], [325, 165], [485, 165], [645, 165] ],
+    [ [5, 325], [165, 325], [325, 325], [485, 325], [645, 325] ],
+    [ [5, 485], [165, 485], [325, 485], [485, 485], [645, 485] ],
+    [ [5, 645], [165, 645], [325, 645], [485, 645], [645, 645] ],
+    [ [5, 805], [165, 805], [325, 805], [485, 805], [645, 805] ],
   ];
 
   static unAuthClEmbed = new Discord.EmbedBuilder().setColor(0x538d4e).setDescription("Sorry, you can't do that");
@@ -215,8 +216,8 @@ export default class Wordle extends CommandT {
     let letterArray = content.toLowerCase().split("");
 
     for (let index in colors) {
-      try { this.ctx.drawImage( Wordle.images.letters[colors[index]][letterArray[index]], ...Wordle.rowLocation[this.guessing][index] )} catch {}
-      try { this.ctx.drawImage( Wordle.images.keyboard[keyboardColors[index]][letterArray[index]], ...(Wordle.keyboardLocation as any)[letterArray[index]] )} catch {}
+      try { this.ctx.drawImage( Wordle.images.letters[colors[index]][letterArray[index]], ...Wordle.rowLocation[this.guessing][index] as [number, number])} catch {}
+      try { this.ctx.drawImage( Wordle.images.keyboard[keyboardColors[index]][letterArray[index]], ...(Wordle.keyboardLocation as any)[letterArray[index]] as [number, number] )} catch {}
     }
     this.guessing++;
     
